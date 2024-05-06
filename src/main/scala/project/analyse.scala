@@ -125,9 +125,9 @@ object analyse {
     // Combine production data with the same date and hour
     val combinedData = data.groupBy(_.dateTime)
       .mapValues(_.map(_.production).sum)
-
+    // Sort the combined data by date and time
     val sortedData = combinedData.toList.sortBy { case (dateTime, _) => dateTime }
-
+    // Calculate daily totals
     val dailyTotals = calculateDailyTotals(data)
     val sortedDailyTotals = dailyTotals.toSeq.sortBy(_._1)
 
@@ -136,22 +136,22 @@ object analyse {
 
     val monthlyTotals = calculateMonthlyTotals(dailyTotals)
     val sortedMonthlyTotals = monthlyTotals.toSeq.sortBy(_._1)
-
+    // Print production data for each date and hour
     sortedData.foreach { case (dateTime, production) =>
       val hour = dateTime.getHour // Extract hour from the date and time
       println(s"$dateTime: $production kWh")
     }
-
+    // Print daily totals
     println("\nDaily Totals:")
     sortedDailyTotals.foreach { case (date, total) =>
       println(s"$date: $total MW")
     }
-
+    // Print weekly totals
     println("\nWeekly Totals:")
     sortedWeeklyTotals.foreach { case (week, total) =>
       println(s"Week $week: $total MW")
     }
-
+    // Print monthly totals
     println("\nMonthly Totals:")
     sortedMonthlyTotals.foreach { case (month, total) =>
       println(s"$month: $total MW")
@@ -159,10 +159,12 @@ object analyse {
   }
 
   def calculateDailyTotals(data: Seq[ProductionData]): Map[LocalDate, Double] = {
+    // Group production data by date and sum up the productions for each day
     data.groupBy(_.dateTime.toLocalDate).view.mapValues(_.map(_.production).sum).toMap
   }
 
   def calculateWeeklyTotals(dailyTotals: Map[LocalDate, Double]): Map[Int, Double] = {
+    // Group daily totals by week and sum up the totals for each week
     dailyTotals.groupBy {
       case (date, _) =>
         val weekFields = WeekFields.of(LocalDate.now().getDayOfWeek, 1)
@@ -171,6 +173,7 @@ object analyse {
   }
 
   def calculateMonthlyTotals(dailyTotals: Map[LocalDate, Double]): Map[String, Double] = {
+    // Group daily totals by month and sum up the totals for each month
     dailyTotals.groupBy {
       case (date, _) =>
         val yearMonth = date.getYear * 100 + date.getMonthValue
