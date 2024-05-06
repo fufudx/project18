@@ -18,9 +18,11 @@ import javax.swing.{JFrame, WindowConstants}
 import scala.util.{Failure, Success, Try, Using}
 
 object project extends App {
+  // API key for data access
   val apiKey = "e9778964ee0a434a871a1d4fb84536c3"
+  // Date formatter for parsing input dates
   val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-
+  // Fetches time series data from the API
   def fetchData(datasetId: Int, startDate: String, endDate: String): Try[List[TimeSeriesData]] = {
     val startTime = Try(s"${LocalDate.parse(startDate, dateFormatter)}T00:00:00Z")
     val endTime = Try(s"${LocalDate.parse(endDate, dateFormatter)}T23:59:59Z")
@@ -49,7 +51,7 @@ object project extends App {
         Failure(new Exception(s"Error parsing end date: ${endError.getMessage}"))
     }
   }
-
+  // Ensures the date entered by the user is valid and not in the future
   def getValidDate(prompt: String): String = {
     println(prompt)
     val date = StdIn.readLine()
@@ -67,17 +69,18 @@ object project extends App {
         getValidDate(prompt)
     }
   }
-
+  // Main loop for the command line interface
   def mainLoop(): Unit = {
     println("1. Collect data")
     println("2. Monitor energy data")
     println("3. View of the energy generation")
     println("4. Data process")
     println("5. Alter system")
+    println("0. Exit")
     val choice = StdIn.readLine()
 
     choice match {
-      case "1" =>
+      case "1" =>// Collects energy data based on user input
         println("Collect data about:")
         println("1: solar energy")
         println("2: wind energy")
@@ -110,7 +113,7 @@ object project extends App {
             println("Invalid choice, please choose again.")
             mainLoop()
         }
-      case "2" =>
+      case "2" =>// Monitors energy data for specific types
         println("Monitor data of:")
         println("1: solar")
         println("2: wind")
@@ -142,7 +145,7 @@ object project extends App {
             println("Invalid choice, please choose again.")
         }
         mainLoop()
-      case "3" =>
+      case "3" =>//View data as a line chart.
         println("Choose energy type:")
         println("1: solar energy")
         println("2: wind energy")
@@ -156,11 +159,11 @@ object project extends App {
         }
         mainLoop()
 
-      case "4" =>
+      case "4" =>// Processes data through an external analysis tool
         analyse.main(Array.empty)
         mainLoop()
 
-      case "5" =>
+      case "5" =>// Alters system settings or data
         println("Welcome to renewable energy alter system:")
         println("Select the type of power generation data to fetch (solar, hydro, wind):")
         val resourceType = StdIn.readLine().toLowerCase()
@@ -187,7 +190,9 @@ object project extends App {
             println("No issues detected with today's production.")
         }
         mainLoop() // Continue after monitoring
-
+      case "0" =>
+        println("Exiting program...")  // Print a message indicating that the program is exiting
+        System.exit(0)  // Exit the program
       case _ =>
         println("Invalid choice, please choose again.")
         mainLoop()
@@ -195,15 +200,20 @@ object project extends App {
   }
 
   def storeDataAsCSV(data: List[TimeSeriesData], outputPath: String, resourceType: String, startDate: String, endDate: String): Unit = {
+    // Construct the filename
     val filename = s"${resourceType} Power.csv"
+    // Construct the full output path
     val fullOutputPath = outputPath + File.separator + filename
-
+    // Create a file object
     val file = new File(fullOutputPath)
+    // Create the directory path
     file.getParentFile.mkdirs()
-
+    // Open the CSV writer
     val writer = CSVWriter.open(file)
     try {
+      // Write the header row
       writer.writeRow(List("DatasetId", "startTime", "endTime", "Value"))
+      // Iterate through the data and write each row
       data.foreach { ts =>
         writer.writeRow(List(ts.datasetId.toString, ts.startTime, ts.endTime, ts.value.toString))
       }
@@ -217,23 +227,30 @@ object project extends App {
   }
 
   mainLoop()
-
+  // Data model for time series data
   case class TimeSeriesData(datasetId: Int, startTime: String, endTime: String, value: Double)
+  // Data model for API response
   case class ApiResponse(data: List[TimeSeriesData], pagination: Pagination)
+  // Pagination details for API responses
   case class Pagination(total: Int, lastPage: Int, prevPage: Option[Int], nextPage: Option[Int], perPage: Int, currentPage: Int, from: Int, to: Int)
 
 
   def viewStoredData(resourceType: String): Unit = {
+    // Date formatter for parsing user input
     val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
     println(s"Viewing $resourceType energy data:")
     println("Enter the date (DD/MM/YYYY):")
+    // Read user input for date
     val dateStr = StdIn.readLine()
 
+    // Parse the input date
     val startDate = LocalDate.parse(dateStr, dateFormatter)
     val endDate = startDate.plusDays(1)
+    // Format start and end dates for API query
     val formattedStartDate = startDate.toString + "T00:00:00Z"
     val formattedEndDate = endDate.toString + "T00:00:00Z"
 
+    // Determine dataset ID based on resource type
     val datasetId = resourceType match {
       case "solar" => 248
       case "wind" => 181
@@ -245,7 +262,7 @@ object project extends App {
 
     val url = uri"https://data.fingrid.fi/api/datasets/$datasetId/data?startTime=$formattedStartDate&endTime=$formattedEndDate&format=json&pageSize=20000"
     val apiKey = "e9778964ee0a434a871a1d4fb84536c3" // Replace with your API key
-
+    // HTTP backend
     implicit val backend = HttpURLConnectionBackend()
 
     val response = Try {
@@ -260,11 +277,12 @@ object project extends App {
       case Success(res) =>
         res.body match {
           case Right(apiResponse) =>
+            // Create dataset for chart
             val dataset = new DefaultCategoryDataset()
             apiResponse.data.foreach { ts =>
               dataset.addValue(ts.value, "Energy", ts.startTime)
             }
-
+            // Create line chart
             val chartTitle = s"$resourceType Power Generation Data"
             val chart = ChartFactory.createLineChart(
               chartTitle,
@@ -276,21 +294,22 @@ object project extends App {
               true,
               false
             )
-
+            // Display chart in a frame
             val panel = new ChartPanel(chart)
             val frame = new JFrame(chartTitle)
             frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE)
             frame.add(panel)
             frame.pack()
             frame.setVisible(true)
-
+            // Write data to file
             Using(new PrintWriter(new File("energy_data.txt"))) { writer =>
               apiResponse.data.foreach(ts => writer.println(s"${ts.startTime},${ts.value}"))
             }.getOrElse(println("Failed to write to file"))
-
+          // Handle error response
           case Left(error) =>
             println(s"Error fetching data: $error")
         }
+      // Handle request failure
       case Failure(exception) =>
         println(s"Failed to fetch data: ${exception.getMessage}")
     }
